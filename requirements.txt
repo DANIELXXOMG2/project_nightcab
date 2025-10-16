@@ -6,11 +6,11 @@ pandas==2.2.2
 numpy==1.26.4
 
 # Big Data Processing
-pyspark==3.5.1
+pyspark==3.5.7
 
 # Machine Learning
 lightgbm==4.4.0
-scikit-learn==1.5.1
+scikit-learn==1.6.1
 
 # Interactive Visualizations
 plotly==5.22.0
@@ -27,5 +27,5 @@ requests==2.32.3
 
 # Additional Dependencies (often required by the above packages)
 pyarrow==16.1.0
-python-dateutil==2.9.0
+python-dateutil==2.9.0.post0
 pytz==2024.1
