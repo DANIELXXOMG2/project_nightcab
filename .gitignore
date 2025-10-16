@@ -1,0 +1,260 @@
+# ==========================================
+# Python Data Science Project - .gitignore
+# ==========================================
+
+# ============ Python ============
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# ============ Entornos Virtuales ============
+# Virtualenv
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+.venv/
+*.venv
+
+# Conda
+.conda/
+conda-meta/
+
+# Pipenv
+Pipfile.lock
+
+# Poetry
+poetry.lock
+
+# ============ Jupyter Notebook ============
+.ipynb_checkpoints
+*/.ipynb_checkpoints/*
+*.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# ============ IDEs y Editores ============
+# Visual Studio Code
+.vscode/
+.history/
+*.code-workspace
+
+# PyCharm
+.idea/
+*.iml
+*.iws
+.idea_modules/
+
+# Spyder
+.spyderproject
+.spyproject
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*.swp
+*.swo
+*~
+
+# Emacs
+*~
+\#*\#
+.\#*
+
+# ============ Sistema Operativo ============
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+.directory
+.Trash-*
+.nfs*
+
+# ============ Data Science Específico ============
+# Datos (carpeta completa)
+data/
+Data/
+DATA/
+/data/**
+*.csv
+*.xlsx
+*.xls
+*.json
+*.xml
+*.parquet
+*.feather
+*.hdf5
+*.h5
+*.db
+*.sqlite
+*.sqlite3
+
+# Modelos entrenados
+models/
+*.pkl
+*.pickle
+*.joblib
+*.h5
+*.hdf5
+*.pb
+*.pt
+*.pth
+*.ckpt
+*.model
+*.keras
+
+# Archivos de configuración con credenciales
+.env
+.env.local
+.env.*.local
+*.env
+config/secrets.py
+secrets.yaml
+secrets.json
+credentials.json
+*.key
+*.pem
+
+# ============ Logs y Temporales ============
+# Logs
+logs/
+*.log
+log/
+*.log.*
+
+# Temporales
+tmp/
+temp/
+*.tmp
+*.temp
+.cache/
+
+# ============ ML/DL Frameworks ============
+# TensorFlow
+*.tfrecord
+*.tfevents.*
+checkpoint
+model.ckpt.*
+saved_model/
+
+# PyTorch
+lightning_logs/
+checkpoints/
+
+# MLflow
+mlruns/
+mlartifacts/
+
+# Weights & Biases
+wandb/
+
+# DVC
+.dvc/
+*.dvc
+.dvcignore
+
+# ============ Otros ============
+# Profiling
+*.prof
+*.lprof
+
+# Documentación generada
+docs/_build/
+site/
+
+# Archivos comprimidos
+*.zip
+*.tar.gz
+*.rar
+*.7z
+
+# Archivos de respaldo
+*.bak
+*.backup
+*.old
+
+# Archivos de bloqueo
+*.lock
+
+# Node (si usas herramientas JS)
+node_modules/
+package-lock.json
