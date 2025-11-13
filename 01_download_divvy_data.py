@@ -110,7 +110,7 @@ if __name__ == "__main__":
     print()
     
     # Obtener los últimos 3 meses completos
-    months_to_download = get_last_n_complete_months(3)
+    months_to_download = get_last_n_complete_months(12)
     
     print(f"📅 Fecha actual: {datetime.now().strftime('%Y-%m-%d')}")
     print(f"📊 Meses a descargar: {len(months_to_download)}")

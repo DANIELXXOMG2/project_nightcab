@@ -252,12 +252,22 @@ def save_parquet(df: pd.DataFrame, output_path: str = "./data/processed/master_d
     print(f"\n📁 Guardando en: {output_path}")
     
     # Guardar en formato Parquet
-    df.to_parquet(output_path, index=False, engine='pyarrow', compression='snappy')
+    # Importante: coercion de timestamps a microsegundos para compatibilidad con Spark 4.x
+    # Pandas guarda datetime en nanosegundos por defecto; Spark 4 lanza error con TIMESTAMP(NANOS)
+    # Usamos coerce_timestamps='us' para forzar microsegundos y allow_truncated_timestamps=True por seguridad.
+    df.to_parquet(
+        output_path,
+        index=False,
+        engine='pyarrow',
+        compression='snappy',
+        coerce_timestamps='us',
+        allow_truncated_timestamps=True
+    )
     
     # Obtener tamaño del archivo
     file_size = os.path.getsize(output_path) / 1024**2
     
-    print(f"   ✅ Archivo guardado exitosamente")
+    print(f"   ✅ Archivo guardado exitosamente (timestamps coerced a microsegundos)")
     print(f"   📊 Tamaño del archivo: {file_size:.2f} MB")
     print(f"   📊 Filas guardadas: {len(df):,}")
     print(f"   📊 Columnas guardadas: {len(df.columns)}")
