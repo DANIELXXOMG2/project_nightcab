@@ -1,19 +1,17 @@
 """
 Script 06: ML para predicción de duración de viaje
 ==================================================
-Objetivo: Entrenar modelos para predecir `trip_duration_minutes` a partir de
-características temporales, de usuario, de vehículo y climáticas.
+Objetivo: Entrenar modelos simples para predecir `trip_duration_minutes` con
+features básicos (hora, día, tipo de usuario, tipo de bicicleta y clima).
 
-- Lectura: `./data/processed/master_dataset.parquet`
-- Ingeniería de variables: `hour_of_day`, `day_of_week`, `is_weekend`,
-  codificación de categorías (`member_casual`, `rideable_type`), y variables
-  de clima (`temperature_2m`, `precipitation_mm`, `wind_speed_10m`).
-- Split temporal: Train = Agosto–Septiembre (2025-08, 2025-09); Test = Octubre (2025-10).
-- Modelos: baseline (promedio), LinearRegression, RandomForestRegressor.
-- Métricas: MAE, RMSE, R2. Resultados guardados en CSV y visualizaciones HTML.
+Incluye:
+1. Split temporal dinámico (último mes = test)
+2. Modelos: baseline (media), LinearRegression y RandomForest (opcional)
+3. HistGradientBoosting como modelo principal
+4. Métricas: MAE, RMSE, R²
+5. Visualizaciones: scatter Pred vs Real (modelo principal) y histograma de residuales
 
-Nota: Se filtran outliers de duración (cap 480 minutos) y se eliminan registros
-con valores nulos en features clave.
+Se elimina toda visualización extra y features experimentales (cíclicos, hash buckets, múltiples gráficos secundarios) para volver a versión clara y compacta.
 """
 
 from pathlib import Path
@@ -21,7 +19,6 @@ import os
 import pandas as pd
 import numpy as np
 from datetime import datetime
-import hashlib
 
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
@@ -59,7 +56,6 @@ def load_data() -> pd.DataFrame:
 
 
 def _haversine_km(lat1, lon1, lat2, lon2):
-    """Distancia Haversine en KM (vectorizada para pandas Series)."""
     R = 6371.0
     lat1 = np.radians(lat1)
     lon1 = np.radians(lon1)
@@ -86,44 +82,19 @@ def feature_engineering(df: pd.DataFrame) -> pd.DataFrame:
     df["is_weekend"] = (df["day_of_week"] >= 5).astype(int)
     df["month"] = df["started_at"].dt.month
     df["year"] = df["started_at"].dt.year
-    df["is_rush_hour"] = df["hour_of_day"].isin([7,8,9,16,17,18,19]).astype(int)
+    # Flag simple de hora punta opcional (se puede quitar si no aporta)
+    df["is_rush_hour"] = df["hour_of_day"].isin([7,8,9,16,17,18]).astype(int)
 
     # Filtrar outliers de duración y nulos
     df = df[df["trip_duration_minutes"].notnull()].copy()
     df = df[df["trip_duration_minutes"] > 0].copy()
     df["trip_duration_minutes"] = df["trip_duration_minutes"].clip(upper=480)
 
-    # Distancia geodésica aproximada (Haversine) y encoding cíclico de hora/día
+    # Distancia aproximada (si lat/lng disponibles); si no, se omite.
     if {"start_lat", "start_lng", "end_lat", "end_lng"}.issubset(df.columns):
         df["distance_km"] = _haversine_km(df["start_lat"], df["start_lng"], df["end_lat"], df["end_lng"]).astype(float)
     else:
         df["distance_km"] = np.nan
-    # Encoding cíclico de hora (24h) y día de la semana (7)
-    df["hour_sin"] = np.sin(2 * np.pi * df["hour_of_day"] / 24.0)
-    df["hour_cos"] = np.cos(2 * np.pi * df["hour_of_day"] / 24.0)
-    df["dow_sin"] = np.sin(2 * np.pi * df["day_of_week"] / 7.0)
-    df["dow_cos"] = np.cos(2 * np.pi * df["day_of_week"] / 7.0)
-
-    # Precipitación binaria
-    df["precip_gt0"] = (df["precipitation_mm"] > 0).astype(int)
-
-    # Buckets hash para estaciones (limita cardinalidad)
-    def _bucketize(series: pd.Series, prefix: str, k: int = 256) -> pd.Series:
-        def h(v):
-            if pd.isna(v):
-                return f"{prefix}_nan"
-            hv = int(hashlib.md5(str(v).encode("utf-8")).hexdigest(), 16) % k
-            return f"{prefix}_{hv}"
-        return series.apply(h)
-
-    if "start_station_id" in df.columns:
-        df["start_bucket"] = _bucketize(df["start_station_id"], "s", 256)
-    else:
-        df["start_bucket"] = "s_nan"
-    if "end_station_id" in df.columns:
-        df["end_bucket"] = _bucketize(df["end_station_id"], "e", 256)
-    else:
-        df["end_bucket"] = "e_nan"
 
     # Selección de columnas útiles
     cols = [
@@ -135,25 +106,13 @@ def feature_engineering(df: pd.DataFrame) -> pd.DataFrame:
         "precipitation_mm",
         "wind_speed_10m",
         "distance_km",
-        "hour_sin",
-        "hour_cos",
-        "dow_sin",
-        "dow_cos",
         "is_rush_hour",
         "month",
         "year",
+        "member_casual",
+        "rideable_type",
     ]
-
-    # Asegurar presencia de categóricas hash
-    cat_cols = ["member_casual", "rideable_type", "start_bucket", "end_bucket"]
-    final_cols = list(dict.fromkeys(cols + cat_cols))
-    df = df[final_cols].dropna(subset=[
-        "trip_duration_minutes",
-        "temperature_2m", "precipitation_mm", "wind_speed_10m",
-        "distance_km", "hour_sin", "hour_cos", "dow_sin", "dow_cos"
-    ]).copy()
-    # Eliminar posibles columnas duplicadas por seguridad
-    df = df.loc[:, ~df.columns.duplicated()]
+    df = df[cols].dropna().copy()
 
     print("   ✓ Variables creadas: hour_of_day, day_of_week, is_weekend, month, year")
     print("   ✓ Filas tras limpieza: {:,}".format(len(df)))
@@ -162,7 +121,7 @@ def feature_engineering(df: pd.DataFrame) -> pd.DataFrame:
 
 def temporal_split(df: pd.DataFrame):
     print("\n" + "=" * 60)
-    print("🗓️  SPLIT TEMPORAL DINÁMICO: TRAIN = todos menos último mes | TEST = último mes")
+    print("🗓️  SPLIT TEMPORAL: train = todos menos último mes; test = último mes")
     print("=" * 60)
     # Determinar el último año/mes disponible
     ym = (df["year"].astype(int) * 100 + df["month"].astype(int))
@@ -242,13 +201,11 @@ def evaluate_models(train_df: pd.DataFrame, test_df: pd.DataFrame):
         "precipitation_mm",
         "wind_speed_10m",
         "distance_km",
-        "hour_sin",
-        "hour_cos",
-        "dow_sin",
-        "dow_cos",
         "is_rush_hour",
+        "month",
+        "year",
     ]
-    categorical_features = ["member_casual", "rideable_type", "start_bucket", "end_bucket"]
+    categorical_features = ["member_casual", "rideable_type"]
 
     # Submuestreo del set de entrenamiento para acelerar
     if len(train_df) > MAX_TRAIN_ROWS:
@@ -276,10 +233,10 @@ def evaluate_models(train_df: pd.DataFrame, test_df: pd.DataFrame):
     # Pipelines
     linreg_pipeline, rf_pipeline, hgb_pipeline = build_pipelines(numeric_features, categorical_features)
 
-    # Envolver modelos con transformación log1p del target para reducir skew
+    # Transformación log para reducir skew
     lin_ttr = TransformedTargetRegressor(regressor=linreg_pipeline, func=np.log1p, inverse_func=np.expm1)
-    rf_ttr = TransformedTargetRegressor(regressor=rf_pipeline, func=np.log1p, inverse_func=np.expm1)
     hgb_ttr = TransformedTargetRegressor(regressor=hgb_pipeline, func=np.log1p, inverse_func=np.expm1)
+    rf_ttr = TransformedTargetRegressor(regressor=rf_pipeline, func=np.log1p, inverse_func=np.expm1)
 
     # Linear Regression
     lin_ttr.fit(X_train, y_train)
@@ -287,13 +244,13 @@ def evaluate_models(train_df: pd.DataFrame, test_df: pd.DataFrame):
     results.append({"model": "linear_regression", **metrics(y_test, lin_pred)})
 
     # Random Forest (opcional por tiempo)
-    enable_rf = False
+    # RandomForest opcional (activar si se desea)
+    enable_rf = True
     if enable_rf:
         rf_ttr.fit(X_train, y_train)
         rf_pred = rf_ttr.predict(X_test)
         results.append({"model": "random_forest", **metrics(y_test, rf_pred)})
 
-    # HistGradientBoosting
     hgb_ttr.fit(X_train, y_train)
     hgb_pred = hgb_ttr.predict(X_test)
     results.append({"model": "hist_gradient_boosting", **metrics(y_test, hgb_pred)})
@@ -304,93 +261,20 @@ def evaluate_models(train_df: pd.DataFrame, test_df: pd.DataFrame):
     print("\n📄 Métricas guardadas en:", METRICS_CSV)
     print(metrics_df)
 
-    # ==============================================
-    # VISUALIZACIONES MEJORADAS
-    # ==============================================
-    import plotly.figure_factory as ff
-
-    preds_df = pd.DataFrame({
-        "actual": y_test,
-        "predicted": hgb_pred,
-        "residual": y_test - hgb_pred,
-        "member_casual": test_df["member_casual"].values,
-        "hour_of_day": test_df["hour_of_day"].values,
-    })
-
-    # --- 1️⃣ Scatter de densidad (hexbin-like) ---
-    fig_density = px.density_heatmap(
-        preds_df,
-        x="actual",
-        y="predicted",
-        nbinsx=80,
-        nbinsy=80,
-        color_continuous_scale="Viridis",
-        labels={"actual": "Real (min)", "predicted": "Predicho (min)"},
-        title="Predicho vs Real (HistGradientBoosting) – Escala logarítmica de densidad",
+    # Visualizaciones simples (scatter + hist residuales del modelo principal HGB)
+    fig_scatter = px.scatter(
+        x=y_test,
+        y=hgb_pred,
+        labels={"x": "Real (min)", "y": "Predicho (min)"},
+        title="Predicción vs Real (HistGradientBoosting)",
+        opacity=0.5,
     )
-    fig_density.update_layout(
-        yaxis=dict(scaleanchor="x", scaleratio=1),
-        coloraxis_colorbar=dict(title="Densidad de puntos"),
-    )
-    fig_density.add_trace(
-        go.Scatter(
-            x=[0, preds_df["actual"].max()],
-            y=[0, preds_df["actual"].max()],
-            mode="lines",
-            name="Ideal",
-            line=dict(color="red", dash="dash")
-        )
-    )
-    fig_density.write_html(PRED_ACT_HTML)
+    fig_scatter.add_trace(go.Scatter(x=[0, y_test.max()], y=[0, y_test.max()], mode="lines", name="Ideal", line=dict(color="red", dash="dash")))
+    fig_scatter.write_html(PRED_ACT_HTML)
 
-    # --- 2️⃣ Distribución de residuales por tipo de usuario ---
-    fig_resid_users = px.box(
-        preds_df,
-        x="member_casual",
-        y="residual",
-        color="member_casual",
-        points="outliers",
-        labels={"member_casual": "Tipo de usuario", "residual": "Error (min)"},
-        title="Distribución de residuales por tipo de usuario"
-    )
-    fig_resid_users.write_html(RESID_HTML.replace(".html", "_by_user.html"))
-
-    # --- 3️⃣ Tendencia del error por hora del día ---
-    resid_hour = preds_df.groupby("hour_of_day")["residual"].agg(["mean", "std"]).reset_index()
-    fig_resid_hour = go.Figure()
-    fig_resid_hour.add_trace(go.Scatter(
-        x=resid_hour["hour_of_day"],
-        y=resid_hour["mean"],
-        mode="lines+markers",
-        name="Error medio",
-        line=dict(color="royalblue")
-    ))
-    fig_resid_hour.add_trace(go.Scatter(
-        x=resid_hour["hour_of_day"],
-        y=resid_hour["mean"] + resid_hour["std"],
-        mode="lines",
-        name="+1σ",
-        line=dict(color="lightgray", dash="dot")
-    ))
-    fig_resid_hour.add_trace(go.Scatter(
-        x=resid_hour["hour_of_day"],
-        y=resid_hour["mean"] - resid_hour["std"],
-        mode="lines",
-        name="-1σ",
-        line=dict(color="lightgray", dash="dot")
-    ))
-    fig_resid_hour.update_layout(
-        title="Error medio por hora del día",
-        xaxis_title="Hora del día",
-        yaxis_title="Residual (min)",
-    )
-    fig_resid_hour.write_html(RESID_HTML.replace(".html", "_by_hour.html"))
-
-    print("📊 Visualizaciones guardadas:")
-    print("   -", PRED_ACT_HTML)
-    print("   -", RESID_HTML.replace(".html", "_by_user.html"))
-    print("   -", RESID_HTML.replace(".html", "_by_hour.html"))
-
+    residuals = y_test - hgb_pred
+    fig_resid = px.histogram(residuals, nbins=50, title="Histograma de Residuales (HGB)", labels={"value": "Residual (min)"})
+    fig_resid.write_html(RESID_HTML)
 
     print("📊 Visualizaciones guardadas:")
     print("   -", PRED_ACT_HTML)
